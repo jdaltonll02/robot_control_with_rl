@@ -128,19 +128,9 @@ class HERReplayBuffer:
         self.achieved_goal_start = obs_dim - goal_dim       # 28
         self.achieved_goal_end = obs_dim                    # 31
 
-        # =====================================================================
-        # TODO: Initialize storage for episodes and transitions.
-        #
-        # You need to store complete episodes so that HER can sample future
-        # goals from the same episode. Consider using:
-        #   - A list of episode dicts, each containing numpy arrays for
-        #     obs, action, next_obs, reward, done
-        #   - An index tracking total transitions stored
-        #
-        # Hint: You'll need to handle the buffer_size limit — when full,
-        # remove the oldest episodes first (FIFO).
-        # =====================================================================
-        raise NotImplementedError("TODO: Initialize episode storage")
+        # Internal storage: list of episode dicts
+        self.episodes = []
+        self.total_transitions = 0
 
     def store_episode(self, episode: dict) -> None:
         """
@@ -161,17 +151,15 @@ class HERReplayBuffer:
             2. Update the total transition count
             3. If the buffer exceeds buffer_size, remove oldest episodes (FIFO)
         """
-        # =====================================================================
-        # TODO: Implement episode storage.
-        #
-        # Steps:
-        #   1. Store the episode (as-is or copy the arrays)
-        #   2. Add episode length to total transition count
-        #   3. While total transitions > buffer_size:
-        #        - Pop the oldest episode
-        #        - Subtract its length from the total count
-        # =====================================================================
-        raise NotImplementedError("TODO: Implement store_episode")
+        # Store a deep copy to avoid accidental modification
+        ep = {k: np.copy(v) for k, v in episode.items()}
+        ep_len = ep["obs"].shape[0]
+        self.episodes.append(ep)
+        self.total_transitions += ep_len
+        # FIFO: remove oldest episodes if over buffer_size
+        while self.total_transitions > self.buffer_size and self.episodes:
+            old_ep = self.episodes.pop(0)
+            self.total_transitions -= old_ep["obs"].shape[0]
 
     def _sample_her_goals(
         self,
@@ -202,20 +190,19 @@ class HERReplayBuffer:
             *next_obs* achieved_goal (i.e., the achieved goal after the
             transition).
         """
-        # =====================================================================
-        # TODO: Implement "future" strategy goal sampling.
-        #
-        # Steps:
-        #   1. Get the episode from storage
-        #   2. Get the episode length T
-        #   3. Sample n_goals indices uniformly from [transition_idx + 1, T)
-        #      (use np.random.randint)
-        #      If transition_idx is the last step, sample from [transition_idx, T)
-        #   4. Extract achieved_goal from next_obs at those indices
-        #      achieved_goal = next_obs[sampled_idx, achieved_goal_start:achieved_goal_end]
-        #   5. Return array of shape (n_goals, goal_dim)
-        # =====================================================================
-        raise NotImplementedError("TODO: Implement _sample_her_goals")
+        ep = self.episodes[episode_idx]
+        T = ep["obs"].shape[0]
+        # If transition_idx is last, sample from [transition_idx, T)
+        start = min(transition_idx + 1, T - 1)
+        if start >= T:
+            start = T - 1
+        if start == T - 1:
+            sampled_idx = np.full(n_goals, T - 1)
+        else:
+            sampled_idx = np.random.randint(start, T, size=n_goals)
+        # Extract achieved_goal from next_obs at sampled_idx
+        ag = ep["next_obs"][sampled_idx, self.achieved_goal_start:self.achieved_goal_end]
+        return ag
 
     def _recompute_reward(
         self,
@@ -237,17 +224,15 @@ class HERReplayBuffer:
         Returns:
             np.ndarray of shape (batch_size,): Recomputed rewards
         """
-        # =====================================================================
-        # TODO: Recompute rewards using self.compute_reward_fn.
-        #
-        # For each transition in the batch:
-        #   reward = self.compute_reward_fn(achieved_goal[i], desired_goal[i],
-        #                                   self.reward_type)
-        #
-        # Hint: You can vectorize this if your compute_reward_fn supports it,
-        # or use a simple loop over the batch.
-        # =====================================================================
-        raise NotImplementedError("TODO: Implement _recompute_reward")
+        # Try to vectorize, else fallback to loop
+        try:
+            rewards = self.compute_reward_fn(achieved_goal, desired_goal, self.reward_type)
+        except Exception:
+            rewards = np.array([
+                self.compute_reward_fn(achieved_goal[i], desired_goal[i], self.reward_type)
+                for i in range(achieved_goal.shape[0])
+            ])
+        return rewards
 
     def sample(self, batch_size: int) -> ReplayBufferSamples:
         """
@@ -272,43 +257,64 @@ class HERReplayBuffer:
                 dones:             (batch_size, 1) tensor
                 rewards:           (batch_size, 1) tensor
         """
-        # =====================================================================
-        # TODO: Implement the full HER sampling procedure.
-        #
-        # Steps:
-        #   1. Create output arrays: obs, actions, next_obs, rewards, dones
-        #      all of shape (batch_size, ...)
-        #
-        #   2. For each sample i in range(batch_size):
-        #      a. Pick a random episode (uniform over stored episodes)
-        #      b. Pick a random transition within that episode
-        #      c. Copy obs, action, next_obs, done from that transition
-        #
-        #      d. Decide whether to relabel (with probability k/(k+1)):
-        #         - Draw uniform random in [0, 1)
-        #         - If < k/(k+1), apply HER relabeling:
-        #           * Sample 1 virtual goal using _sample_her_goals
-        #           * Replace desired_goal in obs[i] and next_obs[i]
-        #             with the virtual goal
-        #           * Get achieved_goal from next_obs[i]
-        #           * Recompute reward using _recompute_reward
-        #         - Otherwise, keep the original transition as-is
-        #           * Copy the original reward
-        #
-        #   3. Convert numpy arrays to PyTorch tensors on self.device
-        #   4. Return ReplayBufferSamples(observations, actions,
-        #          next_observations, dones, rewards)
-        #
-        # Important details:
-        #   - The desired_goal in obs is at indices [desired_goal_start:desired_goal_end]
-        #   - Make sure to COPY arrays before modifying (avoid corrupting stored data)
-        #   - dones should have shape (batch_size, 1), same for rewards
-        # =====================================================================
-        raise NotImplementedError("TODO: Implement sample with HER relabeling")
+        assert len(self.episodes) > 0, "Buffer is empty!"
+        obs = np.zeros((batch_size, self.obs_dim), dtype=np.float32)
+        actions = np.zeros((batch_size, self.action_dim), dtype=np.float32)
+        next_obs = np.zeros((batch_size, self.obs_dim), dtype=np.float32)
+        rewards = np.zeros((batch_size, 1), dtype=np.float32)
+        dones = np.zeros((batch_size, 1), dtype=np.float32)
+
+        k = self.n_sampled_goal
+        relabel_prob = k / (k + 1)
+        for i in range(batch_size):
+            # Sample episode and transition
+            ep_idx = np.random.randint(0, len(self.episodes))
+            ep = self.episodes[ep_idx]
+            ep_len = ep["obs"].shape[0]
+            t_idx = np.random.randint(0, ep_len)
+
+            # Copy original transition
+            obs_i = np.copy(ep["obs"][t_idx])
+            action_i = np.copy(ep["action"][t_idx])
+            next_obs_i = np.copy(ep["next_obs"][t_idx])
+            done_i = np.copy(ep["done"][t_idx])
+            reward_i = np.copy(ep["reward"][t_idx])
+
+            # HER relabeling
+            if np.random.rand() < relabel_prob and t_idx < ep_len - 1:
+                # Sample 1 virtual goal from future
+                virtual_goal = self._sample_her_goals(ep_idx, t_idx, 1)[0]
+                # Replace desired_goal in obs and next_obs
+                obs_i[self.desired_goal_start:self.desired_goal_end] = virtual_goal
+                next_obs_i[self.desired_goal_start:self.desired_goal_end] = virtual_goal
+                # Get achieved_goal from next_obs
+                achieved_goal = next_obs_i[self.achieved_goal_start:self.achieved_goal_end]
+                # Recompute reward
+                reward_i = self._recompute_reward(
+                    achieved_goal.reshape(1, -1), virtual_goal.reshape(1, -1)
+                )[0]
+
+            obs[i] = obs_i
+            actions[i] = action_i
+            next_obs[i] = next_obs_i
+            dones[i, 0] = done_i
+            rewards[i, 0] = reward_i
+
+        # Convert to torch tensors
+        obs = torch.tensor(obs, device=self.device)
+        actions = torch.tensor(actions, device=self.device)
+        next_obs = torch.tensor(next_obs, device=self.device)
+        dones = torch.tensor(dones, device=self.device)
+        rewards = torch.tensor(rewards, device=self.device)
+
+        return ReplayBufferSamples(
+            observations=obs,
+            actions=actions,
+            next_observations=next_obs,
+            dones=dones,
+            rewards=rewards,
+        )
 
     def __len__(self) -> int:
         """Return total number of transitions stored."""
-        # =====================================================================
-        # TODO: Return the total number of transitions across all episodes.
-        # =====================================================================
-        raise NotImplementedError("TODO: Implement __len__")
+        return self.total_transitions

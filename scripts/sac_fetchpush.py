@@ -263,20 +263,14 @@ if __name__ == "__main__":
     # If --her is NOT enabled, the standard ReplayBuffer is used as-is.
     # =========================================================================
     if args.her:
-        # TODO: Import and instantiate your HERReplayBuffer here.
-        # Example:
-        #   from her_replay_buffer import HERReplayBuffer
-        #   rb = HERReplayBuffer(
-        #       buffer_size=args.buffer_size,
-        #       obs_dim=np.array(envs.single_observation_space.shape).prod(),
-        #       action_dim=np.prod(envs.single_action_space.shape),
-        #       compute_reward_fn=FetchPushFlatWrapper.compute_reward_static,
-        #       reward_type=args.reward_type,
-        #       device=device,
-        #   )
-        raise NotImplementedError(
-            "HER is not implemented yet. Implement her_replay_buffer.py "
-            "and wire it in here. See the TODO comment above."
+        from her_replay_buffer import HERReplayBuffer
+        rb = HERReplayBuffer(
+            buffer_size=args.buffer_size,
+            obs_dim=np.array(envs.single_observation_space.shape).prod(),
+            action_dim=np.prod(envs.single_action_space.shape),
+            compute_reward_fn=FetchPushFlatWrapper.compute_reward_static,
+            reward_type=args.reward_type,
+            device=device,
         )
     else:
         rb = ReplayBuffer(
@@ -352,17 +346,29 @@ if __name__ == "__main__":
 
         if args.her:
             # HER: accumulate transitions in episode buffer
-            # TODO: Append transition to episode_buffer.
-            # On episode end (termination or truncation), call:
-            #   rb.store_episode({
-            #       "obs": np.array(episode_buffer["obs"]),
-            #       "action": np.array(episode_buffer["action"]),
-            #       "next_obs": np.array(episode_buffer["next_obs"]),
-            #       "reward": np.array(episode_buffer["reward"]),
-            #       "done": np.array(episode_buffer["done"]),
-            #   })
-            # Then reset episode_buffer for the next episode.
-            pass  # Replace with your implementation
+            episode_buffer["obs"].append(obs.copy())
+            episode_buffer["action"].append(actions.copy())
+            episode_buffer["next_obs"].append(real_next_obs.copy())
+            episode_buffer["reward"].append(rewards.copy())
+            episode_buffer["done"].append(terminations.copy())
+
+            # Check if episode ended for any env
+            for env_idx in range(envs.num_envs):
+                if terminations[env_idx] or truncations[env_idx]:
+                    # Store the completed episode
+                    rb.store_episode({
+                        "obs": np.array(episode_buffer["obs"]),
+                        "action": np.array(episode_buffer["action"]),
+                        "next_obs": np.array(episode_buffer["next_obs"]),
+                        "reward": np.array(episode_buffer["reward"]),
+                        "done": np.array(episode_buffer["done"]),
+                    })
+                    # Reset episode buffer for this env
+                    episode_buffer = {
+                        "obs": [], "action": [], "next_obs": [],
+                        "reward": [], "done": [],
+                    }
+                    break  # Assuming single env for simplicity; adjust for multi-env if needed
         else:
             rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 

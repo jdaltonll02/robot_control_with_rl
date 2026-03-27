@@ -29,40 +29,67 @@ import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 # Register custom env
 from fetch_push_env import register_fetch_push_envs
 register_fetch_push_envs()
 
 
+LOG_STD_MAX = 2
+LOG_STD_MIN = -5
+
+
+class _VecEnvShim:
+    """Minimal shim so Actor/Critic can be instantiated with a plain env."""
+    def __init__(self, env):
+        self.single_observation_space = env.observation_space
+        self.single_action_space = env.action_space
+
+
+class Actor(nn.Module):
+    def __init__(self, env):
+        super().__init__()
+        obs_dim = np.array(env.single_observation_space.shape).prod()
+        act_dim = np.prod(env.single_action_space.shape)
+        self.fc1 = nn.Linear(obs_dim, 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc_mean = nn.Linear(256, act_dim)
+        self.fc_logstd = nn.Linear(256, act_dim)
+        self.register_buffer("action_scale",
+            torch.tensor((env.single_action_space.high - env.single_action_space.low) / 2.0, dtype=torch.float32))
+        self.register_buffer("action_bias",
+            torch.tensor((env.single_action_space.high + env.single_action_space.low) / 2.0, dtype=torch.float32))
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        mean = self.fc_mean(x)
+        log_std = torch.tanh(self.fc_logstd(x))
+        log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
+        return mean, log_std
+
+    def get_action(self, x):
+        mean, log_std = self(x)
+        std = log_std.exp()
+        normal = torch.distributions.Normal(mean, std)
+        x_t = normal.rsample()
+        y_t = torch.tanh(x_t)
+        action = y_t * self.action_scale + self.action_bias
+        log_prob = normal.log_prob(x_t)
+        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
+        log_prob = log_prob.sum(1, keepdim=True)
+        mean = torch.tanh(mean) * self.action_scale + self.action_bias
+        return action, log_prob, mean
+
+
 def load_cleanrl_model(model_path: str, env: gym.Env):
-    """
-    Load a CleanRL saved model.
-
-    NOTE TO CANDIDATES: CleanRL's latest scripts save agent.state_dict()
-    (not the full model object). You will need to:
-    1. Define or import the same Agent/Actor class used during training
-    2. Instantiate it with the correct observation/action dimensions
-    3. Call model.load_state_dict(torch.load(model_path))
-
-    This function provides a basic fallback that tries torch.load() directly.
-    You should replace or extend it to match your training script's Agent class.
-    """
-    try:
-        loaded = torch.load(model_path, map_location="cpu", weights_only=False)
-        if isinstance(loaded, dict):
-            raise ValueError(
-                "Model file contains a state_dict, not a full model. "
-                "You need to reconstruct the Agent class and call "
-                "agent.load_state_dict(state_dict). See the SAC/DDPG "
-                "training script for the Agent/Actor class definition."
-            )
-        return loaded
-    except Exception as e:
-        print(f"Could not load model: {e}")
-        print("You need to adjust the loading code for your CleanRL version.")
-        print("See README for guidance on model loading.")
-        raise
+    vec_env = _VecEnvShim(env)
+    actor = Actor(vec_env)
+    state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
+    actor.load_state_dict(state_dict)
+    actor.eval()
+    return actor
 
 
 def evaluate(
