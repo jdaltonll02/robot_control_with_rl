@@ -32,3 +32,5 @@ checkpoints/
 
 # CleanRL
 cleanrl/
+slurm_scripts/
+slurm_logs/
