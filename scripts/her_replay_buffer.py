@@ -232,7 +232,7 @@ class HERReplayBuffer:
                 self.compute_reward_fn(achieved_goal[i], desired_goal[i], self.reward_type)
                 for i in range(achieved_goal.shape[0])
             ])
-        return rewards
+        return np.array(rewards)
 
     def sample(self, batch_size: int) -> ReplayBufferSamples:
         """
@@ -318,3 +318,4 @@ class HERReplayBuffer:
     def __len__(self) -> int:
         """Return total number of transitions stored."""
         return self.total_transitions
+''
