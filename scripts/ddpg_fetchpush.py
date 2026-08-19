@@ -4,7 +4,7 @@
 # Original: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ddpg_continuous_action.py
 # Docs: https://docs.cleanrl.dev/rl-algorithms/ddpg/#ddpg_continuous_actionpy
 #
-# Modifications for this assessment:
+# Modifications for this project:
 #   - Pre-configured for FetchPushFlat-v0 environment
 #   - Added --reward-type argument for reward function selection
 #   - Added --her flag for Hindsight Experience Replay integration
@@ -70,6 +70,16 @@ class Args:
     """enable Hindsight Experience Replay"""
     gradient_steps: int = 1
     """number of gradient updates per env step (increase for HER, e.g. 4-40)"""
+
+    # Domain randomization arguments
+    randomize: bool = False
+    """enable domain randomization (randomize physics at each episode reset)"""
+    mass_range: tuple = (1.0, 1.0)
+    """range [min, max] for object mass multiplier when randomize=True"""
+    friction_range: tuple = (1.0, 1.0)
+    """range [min, max] for friction multiplier when randomize=True"""
+    size_range: tuple = (1.0, 1.0)
+    """range [min, max] for object size multiplier when randomize=True"""
 
     # Algorithm specific arguments
     total_timesteps: int = 250000
@@ -176,7 +186,14 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    env_kwargs = {"reward_type": args.reward_type}
+    # Pass reward type and domain randomization settings to the environment.
+    env_kwargs = {
+        "reward_type": args.reward_type,
+        "randomize": args.randomize,
+        "mass_range": list(args.mass_range),
+        "friction_range": list(args.friction_range),
+        "size_range": list(args.size_range),
+    }
     envs = gym.vector.SyncVectorEnv(
         [make_env(args.env_id, args.seed, 0, args.capture_video, run_name, env_kwargs=env_kwargs)],
         autoreset_mode=gym.vector.AutoresetMode.SAME_STEP,
@@ -270,6 +287,9 @@ if __name__ == "__main__":
                 print(f"global_step={global_step}, episodic_return={fi['episode']['r'][0]:.2f}")
                 writer.add_scalar("charts/episodic_return", fi["episode"]["r"][0], global_step)
                 writer.add_scalar("charts/episodic_length", fi["episode"]["l"][0], global_step)
+                # Log success rate from the final info dict if available
+                if "is_success" in fi:
+                    writer.add_scalar("charts/success_rate", float(fi["is_success"][0]), global_step)
             elif isinstance(fi, (list, np.ndarray)):
                 # gymnasium < 1.0: fi is a list of per-env info dicts
                 for info in fi:
@@ -277,6 +297,8 @@ if __name__ == "__main__":
                         print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                        if "is_success" in info:
+                            writer.add_scalar("charts/success_rate", float(info["is_success"]), global_step)
                         break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_obs`

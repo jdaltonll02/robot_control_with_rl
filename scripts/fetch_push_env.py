@@ -42,10 +42,7 @@ class FetchPushFlatWrapper(gym.Wrapper):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 25}
 
-    REWARD_TYPES = ["sparse", "dense_basic", "multi_component"]
-    # ^^^ CANDIDATES: Add your custom reward types to this list when you
-    # implement them. For example:
-    #   REWARD_TYPES = ["sparse", "dense_basic", "multi_component", "potential_based"]
+    REWARD_TYPES = ["sparse", "dense_basic", "multi_component", "progress_bonus", "energy_efficient"]
 
     def __init__(
         self,
@@ -208,8 +205,8 @@ class FetchPushFlatWrapper(gym.Wrapper):
         """
         Compute reward based on the selected reward type.
 
-        CANDIDATES: This is where you implement your custom reward functions.
-        Add new elif branches for your reward types.
+        This is where custom reward functions are implemented.
+        Add new elif branches for new reward types.
 
         Available information:
             obs_dict: Dict with keys 'observation', 'achieved_goal', 'desired_goal'
@@ -231,7 +228,7 @@ class FetchPushFlatWrapper(gym.Wrapper):
             return -distance
 
         # =====================================================================
-        # CANDIDATES: Add your custom reward functions below.
+        # Custom reward functions are added below.
         #
         # Available variables for reward computation:
         #   - distance:          L2 distance from object to goal
@@ -294,6 +291,39 @@ class FetchPushFlatWrapper(gym.Wrapper):
                 + success_bonus
             )
 
+        elif self.reward_type == "progress_bonus":
+            # Progress-bonus reward: sparse base + bonus for moving object toward goal.
+            # Motivation: sparse reward alone gives no gradient; adding a per-step
+            # progress signal rewards movement in the right direction without
+            # over-shaping the policy the way a pure dense reward can.
+            #
+            # r = sparse_base + w_progress * (d_{t-1} - d_t) + success_bonus
+            #
+            # This reward is recomputable from (achieved_goal, desired_goal) for
+            # HER relabeling via compute_reward_static (uses sparse fallback there,
+            # which is correct because HER virtual transitions are already successes).
+            sparse_base = 0.0 if is_success else -1.0
+            progress = self._prev_distance - distance   # positive when object moves closer
+            progress_reward = 10.0 * progress           # scale to be meaningful vs -1 base
+            success_bonus = 5.0 if is_success else 0.0  # extra incentive for completion
+            return sparse_base + progress_reward + success_bonus
+
+        elif self.reward_type == "energy_efficient":
+            # Energy-efficient reward: dense distance signal + action-energy penalty.
+            # Motivation: real actuators have torque limits; penalising the L2 norm
+            # of end-effector commands encourages smoother, lower-energy trajectories
+            # that transfer better to hardware.
+            #
+            # r = -distance - w_energy * ||a_{0:3}||^2 + success_bonus
+            #
+            # Only the distance term is used in compute_reward_static for HER
+            # relabeling; the energy penalty applies only to original transitions
+            # (action is not available after goal relabeling).
+            dense_distance = -distance                          # continuous gradient toward goal
+            energy_penalty = -0.1 * np.sum(action[:3] ** 2)    # penalise wasteful movement
+            success_bonus = 1.0 if is_success else 0.0         # small bonus on completion
+            return dense_distance + energy_penalty + success_bonus
+
         else:
             raise ValueError(
                 f"Unknown reward_type: '{self.reward_type}'. "
@@ -334,19 +364,23 @@ class FetchPushFlatWrapper(gym.Wrapper):
             return 0.0 if distance < threshold else -1.0
         elif reward_type == "dense_basic":
             return -distance
+        elif reward_type == "progress_bonus":
+            # HER relabeling: use sparse reward.
+            # The progress component (d_{t-1} - d_t) requires two timesteps and
+            # cannot be recomputed from a single (achieved_goal, desired_goal) pair.
+            # Virtual HER transitions are already near-successes, so sparse is correct.
+            return 0.0 if distance < threshold else -1.0
+
+        elif reward_type == "energy_efficient":
+            # HER relabeling: use dense distance only (no action available).
+            # The energy penalty term requires the action, which is not passed to
+            # this static method. The distance term alone is sufficient for HER.
+            return -distance
+
         else:
-            # CANDIDATES: Add your custom reward types here.
-            # Note: For HER, only reward components that depend on the
-            # goal (achieved_goal, desired_goal, distance) can be
-            # accurately recomputed. Components that depend on action,
-            # velocity, or step count are not available here.
-            #
-            # A common approach: use sparse reward for HER relabeling
-            # and your custom reward for the original (non-relabeled)
-            # transitions.
             raise ValueError(
                 f"Unknown reward_type for static computation: '{reward_type}'. "
-                f"Add your custom reward type here or use 'sparse' for HER."
+                f"Available: sparse, dense_basic, progress_bonus, energy_efficient"
             )
 
     @staticmethod

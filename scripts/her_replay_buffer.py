@@ -8,8 +8,6 @@ This module provides a replay buffer that implements the HER relabeling
 strategy. HER enables learning from failed episodes by retroactively
 replacing the desired goal with goals that the agent actually achieved.
 
-YOUR TASK: Implement the methods marked with TODO below.
-
 The buffer stores complete episodes and, at sample time, creates virtual
 transitions where the desired goal is replaced with an achieved goal from
 a future timestep in the same episode. This dramatically increases the
@@ -318,4 +316,3 @@ class HERReplayBuffer:
     def __len__(self) -> int:
         """Return total number of transitions stored."""
         return self.total_transitions
-''

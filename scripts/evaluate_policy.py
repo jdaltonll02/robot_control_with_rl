@@ -16,8 +16,8 @@ Usage:
         --record-video \
         --video-dir videos/
 
-NOTE: This is a helper script. Candidates may evaluate differently.
-What matters is the output JSON format.
+NOTE: This is a helper script — other evaluation approaches are fine as
+long as they produce the same output JSON format.
 """
 
 import argparse
@@ -41,13 +41,14 @@ LOG_STD_MIN = -5
 
 
 class _VecEnvShim:
-    """Minimal shim so Actor/Critic can be instantiated with a plain env."""
+    """Minimal shim so Actor can be instantiated with a plain (non-vectorised) env."""
     def __init__(self, env):
         self.single_observation_space = env.observation_space
         self.single_action_space = env.action_space
 
 
-class Actor(nn.Module):
+class SACActorNet(nn.Module):
+    """Mirrors the Actor class in sac_fetchpush.py exactly."""
     def __init__(self, env):
         super().__init__()
         obs_dim = np.array(env.single_observation_space.shape).prod()
@@ -83,11 +84,43 @@ class Actor(nn.Module):
         return action, log_prob, mean
 
 
-def load_cleanrl_model(model_path: str, env: gym.Env):
+class DDPGActorNet(nn.Module):
+    """Mirrors the Actor class in ddpg_fetchpush.py exactly."""
+    def __init__(self, env):
+        super().__init__()
+        obs_dim = np.array(env.single_observation_space.shape).prod()
+        act_dim = np.prod(env.single_action_space.shape)
+        self.fc1 = nn.Linear(obs_dim, 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc_mu = nn.Linear(256, act_dim)
+        self.register_buffer("action_scale",
+            torch.tensor((env.single_action_space.high - env.single_action_space.low) / 2.0, dtype=torch.float32))
+        self.register_buffer("action_bias",
+            torch.tensor((env.single_action_space.high + env.single_action_space.low) / 2.0, dtype=torch.float32))
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = torch.tanh(self.fc_mu(x))
+        return x * self.action_scale + self.action_bias
+
+
+def load_cleanrl_model(model_path: str, env: gym.Env, algorithm: str = "SAC"):
+    """
+    Load a CleanRL saved actor.
+    SAC saves actor.state_dict() directly.
+    DDPG saves (actor.state_dict(), qf1.state_dict()) as a tuple.
+    """
     vec_env = _VecEnvShim(env)
-    actor = Actor(vec_env)
-    state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
-    actor.load_state_dict(state_dict)
+    state = torch.load(model_path, map_location="cpu", weights_only=True)
+    if algorithm.upper() == "DDPG":
+        # DDPG checkpoint is a tuple (actor_sd, qf1_sd)
+        actor_sd = state[0] if isinstance(state, (tuple, list)) else state
+        actor = DDPGActorNet(vec_env)
+    else:
+        actor_sd = state
+        actor = SACActorNet(vec_env)
+    actor.load_state_dict(actor_sd)
     actor.eval()
     return actor
 
@@ -192,7 +225,7 @@ def main():
 
     print(f"Loading model from: {args.model_path}")
     dummy_env = gym.make(args.env_id, **env_kwargs)
-    model = load_cleanrl_model(args.model_path, dummy_env)
+    model = load_cleanrl_model(args.model_path, dummy_env, algorithm=args.algorithm)
     dummy_env.close()
 
     print(f"Evaluating for {args.n_episodes} episodes...")
