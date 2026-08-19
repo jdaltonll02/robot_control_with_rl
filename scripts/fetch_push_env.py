@@ -409,7 +409,7 @@ def register_fetch_push_envs():
     """Register the custom FetchPush environments with Gymnasium."""
     gym.register(
         id="FetchPushFlat-v0",
-        entry_point="scripts.fetch_push_env:FetchPushFlatWrapper",
+        entry_point=FetchPushFlatWrapper,
         kwargs={"reward_type": "sparse"},
         max_episode_steps=50,
     )

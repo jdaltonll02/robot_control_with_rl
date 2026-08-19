@@ -58,6 +58,9 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
     save_model: bool = True
     """whether to save model into the `runs/{run_name}` folder"""
+    monitor_every: int = 0
+    """if > 0, every this many timesteps, pause training and show one live rollout with
+    the current policy in a MuJoCo viewer window, then resume headless training (0 = disabled)"""
 
     # Environment arguments
     env_id: str = "FetchPushFlat-v0"
@@ -246,6 +249,10 @@ if __name__ == "__main__":
 
     max_action = float(envs.single_action_space.high[0])
 
+    # Optional live viewer for periodic visual monitoring during training (see --monitor-every).
+    # Kept as a separate persistent env so we're not reloading the MuJoCo model each time.
+    monitor_env = gym.make(args.env_id, render_mode="human", **env_kwargs) if args.monitor_every > 0 else None
+
     actor = Actor(envs).to(device)
     qf1 = SoftQNetwork(envs).to(device)
     qf2 = SoftQNetwork(envs).to(device)
@@ -397,6 +404,18 @@ if __name__ == "__main__":
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
 
+        # Periodic live viewer rollout: pause training briefly to watch the current
+        # policy act, then resume. Uses the deterministic (mean) action, same as eval.
+        if monitor_env is not None and global_step > 0 and global_step % args.monitor_every == 0:
+            print(f"[monitor] step {global_step}: showing live rollout...")
+            m_obs, _ = monitor_env.reset()
+            m_done = False
+            while not m_done:
+                with torch.no_grad():
+                    _, _, m_action = actor.get_action(torch.Tensor(m_obs).unsqueeze(0).to(device))
+                m_obs, _, m_term, m_trunc, _ = monitor_env.step(m_action.squeeze(0).cpu().numpy())
+                m_done = m_term or m_trunc
+
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
           for _grad_step in range(args.gradient_steps):
@@ -472,4 +491,6 @@ if __name__ == "__main__":
         print(f"model saved to {model_path}")
 
     envs.close()
+    if monitor_env is not None:
+        monitor_env.close()
     writer.close()
