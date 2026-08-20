@@ -230,7 +230,9 @@ class HERReplayBuffer:
                 self.compute_reward_fn(achieved_goal[i], desired_goal[i], self.reward_type)
                 for i in range(achieved_goal.shape[0])
             ])
-        return np.array(rewards)
+        # compute_reward_static returns a plain scalar for a single (1, goal_dim) pair
+        # (its norm has no axis argument), so wrap to guarantee an indexable array.
+        return np.atleast_1d(rewards)
 
     def sample(self, batch_size: int) -> ReplayBufferSamples:
         """

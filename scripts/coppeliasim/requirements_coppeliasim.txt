@@ -1,0 +1,8 @@
+# Extra dependencies for the CoppeliaSim variant only.
+# Install with: pip install -r scripts/coppeliasim/requirements_coppeliasim.txt
+# The base project's requirements (gymnasium, torch, tyro, etc.) are unaffected.
+
+coppeliasim-zmqremoteapi-client
+pyzmq
+cbor2
+xacro

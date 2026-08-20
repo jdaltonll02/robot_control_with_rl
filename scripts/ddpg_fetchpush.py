@@ -144,12 +144,14 @@ class Actor(nn.Module):
         self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc_mu = nn.Linear(256, np.prod(env.single_action_space.shape))
-        # action rescaling
+        # action rescaling (single_action_space, not the vectorized/batched action_space)
         self.register_buffer(
-            "action_scale", torch.tensor((env.action_space.high - env.action_space.low) / 2.0, dtype=torch.float32)
+            "action_scale",
+            torch.tensor((env.single_action_space.high - env.single_action_space.low) / 2.0, dtype=torch.float32),
         )
         self.register_buffer(
-            "action_bias", torch.tensor((env.action_space.high + env.action_space.low) / 2.0, dtype=torch.float32)
+            "action_bias",
+            torch.tensor((env.single_action_space.high + env.single_action_space.low) / 2.0, dtype=torch.float32),
         )
 
     def forward(self, x):
@@ -319,12 +321,16 @@ if __name__ == "__main__":
                 break
 
         if args.her:
-            # HER: accumulate transitions in episode buffer
-            episode_buffer["obs"].append(obs.copy())
-            episode_buffer["action"].append(actions.copy())
-            episode_buffer["next_obs"].append(real_next_obs.copy())
-            episode_buffer["reward"].append(rewards.copy())
-            episode_buffer["done"].append(terminations.copy())
+            # HER: accumulate transitions in episode buffer.
+            # Squeeze the num_envs axis (always 1 here) so each entry matches
+            # HERReplayBuffer's documented per-timestep shapes: (obs_dim,), (action_dim,),
+            # and scalar reward/done. Storing the raw vectorized (1, ...) shapes instead
+            # breaks HERReplayBuffer's goal-relabeling indexing and reward/done assignment.
+            episode_buffer["obs"].append(obs[0].copy())
+            episode_buffer["action"].append(actions[0].copy())
+            episode_buffer["next_obs"].append(real_next_obs[0].copy())
+            episode_buffer["reward"].append(rewards[0].copy())
+            episode_buffer["done"].append(terminations[0].copy())
 
             # Check if episode ended for any env
             for env_idx in range(envs.num_envs):

@@ -1,21 +1,21 @@
-# SAC (Soft Actor-Critic) adapted for FetchPushFlat-v0
+# SAC (Soft Actor-Critic) adapted for FetchPushCoppeliaSim-v0
+#
+# Minimal-diff variant of sac_fetchpush.py, pointed at the CoppeliaSim-backed environment
+# instead of MuJoCo. See docs/08-coppeliasim-variant.md — the CoppeliaSim scene must already
+# be built and running before this script is run. EXPERIMENTAL / UNVERIFIED: nothing here has
+# been run against a live CoppeliaSim instance.
+#
+# The only differences from sac_fetchpush.py are: the environment import/registration (this
+# file), the `env_id` default, and nothing else — the SAC algorithm, HER integration, and
+# --monitor-every viewer are all identical, since they're already generic over env_id/env_kwargs.
 #
 # Based on CleanRL's sac_continuous_action.py
 # Original: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/sac_continuous_action.py
 # Docs: https://docs.cleanrl.dev/rl-algorithms/sac/#sac_continuous_actionpy
 #
-# Modifications for this project:
-#   - Pre-configured for FetchPushFlat-v0 environment
-#   - Added --reward-type argument for reward function selection
-#   - Added --her flag for Hindsight Experience Replay integration
-#   - Model saving enabled by default
-#
 # Usage:
-#   # Baseline (without HER):
-#   python scripts/sac_fetchpush.py --reward-type sparse --total-timesteps 250000
-#
-#   # With HER (after implementing her_replay_buffer.py):
-#   python scripts/sac_fetchpush.py --reward-type sparse --her --total-timesteps 250000
+#   # Smoke test (see docs/08-coppeliasim-variant.md before running):
+#   python scripts/sac_fetchpush_coppeliasim.py --reward-type sparse --her --total-timesteps 300 --learning-starts 0
 #
 import os
 import random
@@ -33,9 +33,12 @@ from torch.utils.tensorboard import SummaryWriter
 
 from cleanrl_utils.buffers import ReplayBuffer
 
-# Register FetchPush custom environment
-from fetch_push_env import FetchPushFlatWrapper, register_fetch_push_envs
-register_fetch_push_envs()
+# Reused, not copied: pure math on (achieved_goal, desired_goal), zero MuJoCo dependency.
+from fetch_push_env import FetchPushFlatWrapper
+# Register the CoppeliaSim-backed FetchPush environment (the only import that differs from
+# sac_fetchpush.py, which registers the MuJoCo one instead).
+from fetch_push_env_coppeliasim import register_fetch_push_coppeliasim_envs
+register_fetch_push_coppeliasim_envs()
 
 
 @dataclass
@@ -55,20 +58,25 @@ class Args:
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
     capture_video: bool = False
-    """whether to capture videos of the agent performances (check out `videos` folder)"""
+    """whether to capture videos of the agent performances (NOT supported yet for the
+    CoppeliaSim backend — see docs/08-coppeliasim-variant.md, "known gaps")"""
     save_model: bool = True
     """whether to save model into the `runs/{run_name}` folder"""
     monitor_every: int = 0
     """if > 0, every this many timesteps, pause training and show one live rollout with
-    the current policy in a MuJoCo viewer window, then resume headless training (0 = disabled)"""
+    the current policy, then resume headless training (0 = disabled). For CoppeliaSim this
+    reuses the same running instance rather than opening a second window — verify this in
+    the smoke test rather than assuming it."""
 
     # Environment arguments
-    env_id: str = "FetchPushFlat-v0"
+    env_id: str = "FetchPushCoppeliaSim-v0"
     """the environment id"""
     reward_type: str = "sparse"
-    """reward type for FetchPush (sparse, dense_basic, or your custom types)"""
+    """reward type for FetchPush (sparse, dense_basic, progress_bonus, energy_efficient —
+    multi_component is not ported for this backend, same as the MuJoCo original with --her)"""
     num_envs: int = 1
-    """the number of parallel game environments"""
+    """the number of parallel game environments (CoppeliaSim variant is scoped to 1 — true
+    vectorization would need multiple CoppeliaSim processes on distinct ZMQ ports)"""
 
     # HER arguments
     her: bool = False
@@ -82,13 +90,15 @@ class Args:
     mass_range: tuple = (1.0, 1.0)
     """range [min, max] for object mass multiplier when randomize=True"""
     friction_range: tuple = (1.0, 1.0)
-    """range [min, max] for friction multiplier when randomize=True"""
+    """range [min, max] for friction multiplier when randomize=True (VERIFY: friction
+    randomization is a documented gap for the CoppeliaSim backend, see docs)"""
     size_range: tuple = (1.0, 1.0)
     """range [min, max] for object size multiplier when randomize=True"""
 
     # Algorithm specific arguments
     total_timesteps: int = 250000
-    """total timesteps of the experiments"""
+    """total timesteps of the experiments (start much smaller — see docs, throughput risk —
+    and size this to your measured steps/sec before committing to a long run)"""
     buffer_size: int = int(1e6)
     """the replay memory buffer size"""
     gamma: float = 0.95
@@ -250,8 +260,8 @@ if __name__ == "__main__":
     max_action = float(envs.single_action_space.high[0])
 
     # Optional live viewer for periodic visual monitoring during training (see --monitor-every).
-    # Kept as a separate persistent env so we're not reloading the MuJoCo model each time.
-    monitor_env = gym.make(args.env_id, render_mode="human", **env_kwargs) if args.monitor_every > 0 else None
+    # For CoppeliaSim this connects to the same running instance rather than a second scene.
+    monitor_env = gym.make(args.env_id, **env_kwargs) if args.monitor_every > 0 else None
 
     actor = Actor(envs).to(device)
     qf1 = SoftQNetwork(envs).to(device)
@@ -274,18 +284,6 @@ if __name__ == "__main__":
 
     envs.single_observation_space.dtype = np.float32
 
-    # =========================================================================
-    # Replay buffer setup
-    #
-    # If --her is enabled, use HERReplayBuffer instead of the standard
-    # ReplayBuffer. You need to:
-    #   1. Import HERReplayBuffer from her_replay_buffer
-    #   2. Instantiate it with the correct parameters
-    #   3. Collect full episodes and call her_buffer.store_episode()
-    #   4. Sample from her_buffer.sample() during training
-    #
-    # If --her is NOT enabled, the standard ReplayBuffer is used as-is.
-    # =========================================================================
     if args.her:
         from her_replay_buffer import HERReplayBuffer
         rb = HERReplayBuffer(
@@ -308,16 +306,6 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    # =========================================================================
-    # Episode collection for HER
-    #
-    # When using HER, you need to collect complete episodes before storing
-    # them in the buffer. The episode_buffer below accumulates transitions
-    # for the current episode. On episode end, store_episode() is called.
-    #
-    # When NOT using HER, transitions are added to the replay buffer
-    # immediately (standard approach).
-    # =========================================================================
     if args.her:
         episode_buffer = {
             "obs": [], "action": [], "next_obs": [],

@@ -1,23 +1,30 @@
 #!/usr/bin/env python3
 """
-Evaluation script for trained RL policies on FetchPushFlat-v0.
+Evaluation script for trained RL policies on FetchPushCoppeliaSim-v0.
 
-Loads a trained CleanRL model, runs evaluation episodes, computes metrics,
-and saves results in the required JSON format.
+Minimal-diff variant of evaluate_policy.py, pointed at the CoppeliaSim-backed environment
+instead of MuJoCo. See docs/08-coppeliasim-variant.md — the CoppeliaSim scene must already be
+built and running before this script is run. EXPERIMENTAL / UNVERIFIED: nothing here has been
+run against a live CoppeliaSim instance.
+
+SACActorNet, DDPGActorNet, load_cleanrl_model(), and evaluate() are unchanged from
+evaluate_policy.py — they're already fully generic over obs/action shapes and don't reference
+FetchPushFlatWrapper or MuJoCo directly. Only the registration import and the --env-id default
+differ.
 
 Usage:
-    python scripts/evaluate_policy.py \
-        --model-path runs/<run-name>/sac_fetchpush.cleanrl_model \
-        --env-id FetchPushFlat-v0 \
+    python scripts/evaluate_policy_coppeliasim.py \
+        --model-path runs/<run-name>/sac-her-coppeliasim.cleanrl_model \
+        --env-id FetchPushCoppeliaSim-v0 \
         --reward-type sparse \
         --algorithm SAC \
         --n-episodes 100 \
-        --output results/sac_her_results.json \
-        --record-video \
-        --video-dir videos/
+        --output results/sac_her_coppeliasim_results.json
 
-NOTE: This is a helper script — other evaluation approaches are fine as
-long as they produce the same output JSON format.
+NOTE: --record-video is NOT supported for this backend yet (CoppeliaSim needs a vision sensor
++ sim.getVisionSensorImg() for rgb_array frames, unlike MuJoCo's direct renderer passthrough —
+see docs/08-coppeliasim-variant.md, "known gaps"). Passing it will fail when the env tries to
+construct with render_mode="rgb_array".
 """
 
 import argparse
@@ -31,9 +38,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# Register custom env
-from fetch_push_env import register_fetch_push_envs
-register_fetch_push_envs()
+# Register the CoppeliaSim-backed FetchPush environment (the only import that differs from
+# evaluate_policy.py, which registers the MuJoCo one instead).
+from fetch_push_env_coppeliasim import register_fetch_push_coppeliasim_envs
+register_fetch_push_coppeliasim_envs()
 
 
 LOG_STD_MAX = 2
@@ -48,7 +56,7 @@ class _VecEnvShim:
 
 
 class SACActorNet(nn.Module):
-    """Mirrors the Actor class in sac_fetchpush.py exactly."""
+    """Mirrors the Actor class in sac_fetchpush_coppeliasim.py (and sac_fetchpush.py) exactly."""
     def __init__(self, env):
         super().__init__()
         obs_dim = np.array(env.single_observation_space.shape).prod()
@@ -85,7 +93,7 @@ class SACActorNet(nn.Module):
 
 
 class DDPGActorNet(nn.Module):
-    """Mirrors the Actor class in ddpg_fetchpush.py exactly."""
+    """Mirrors the Actor class in ddpg_fetchpush_coppeliasim.py (and ddpg_fetchpush.py) exactly."""
     def __init__(self, env):
         super().__init__()
         obs_dim = np.array(env.single_observation_space.shape).prod()
@@ -122,8 +130,7 @@ def load_cleanrl_model(model_path: str, env: gym.Env, algorithm: str = "SAC"):
         actor = SACActorNet(vec_env)
     # action_scale/action_bias are deterministic functions of the action space bounds,
     # not learned parameters — always let the freshly-constructed model derive them from
-    # this env rather than loading them, since older checkpoints may have saved them with
-    # a vectorized-env shape (1, action_dim) instead of (action_dim,).
+    # this env rather than loading them.
     actor_sd = {k: v for k, v in actor_sd.items() if k not in ("action_scale", "action_bias")}
     actor.load_state_dict(actor_sd, strict=False)
     actor.eval()
@@ -202,13 +209,14 @@ def evaluate(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate RL policy on FetchPushFlat")
+    parser = argparse.ArgumentParser(description="Evaluate RL policy on FetchPushCoppeliaSim")
     parser.add_argument("--model-path", type=str, required=True)
-    parser.add_argument("--env-id", type=str, default="FetchPushFlat-v0")
+    parser.add_argument("--env-id", type=str, default="FetchPushCoppeliaSim-v0")
     parser.add_argument("--reward-type", type=str, default="sparse")
     parser.add_argument("--n-episodes", type=int, default=100)
     parser.add_argument("--output", type=str, required=True)
-    parser.add_argument("--record-video", action="store_true")
+    parser.add_argument("--record-video", action="store_true",
+                         help="NOT supported yet for this backend — see module docstring")
     parser.add_argument("--video-dir", type=str, default="videos/")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--algorithm", type=str, default="SAC")
@@ -247,7 +255,7 @@ def main():
     eval_time = time.time() - start
 
     results = {
-        "experiment": f"reward_{args.reward_type}_{args.algorithm.lower()}",
+        "experiment": f"reward_{args.reward_type}_{args.algorithm.lower()}_coppeliasim",
         "algorithm": args.algorithm,
         "reward_type": args.reward_type,
         "env_id": args.env_id,
@@ -265,7 +273,7 @@ def main():
         },
         "hardware": args.hardware,
         "seed": args.seed,
-        "notes": "",
+        "notes": "CoppeliaSim backend (experimental)",
     }
 
     output_path = Path(args.output)
