@@ -37,29 +37,31 @@ except ImportError:
     from scripts.fetch_push_env import FetchPushFlatWrapper
 
 # ---------------------------------------------------------------------------
-# Object/joint paths in the CoppeliaSim scene. These depend entirely on what
-# your URDF import actually produced — check the scene hierarchy after import
-# and edit this dict to match. See docs/08-coppeliasim-variant.md step 8.
+# Object/joint paths in the CoppeliaSim scene. Confirmed against an actual URDF import
+# (see docs/08-coppeliasim-variant.md) — the importer preserves joint names verbatim from
+# the URDF and does NOT nest them under a "/Fetch/" group, so paths are flat, just the joint
+# name itself. push_object/goal_marker/ik_target/ik_tip still need to be added by hand
+# (Add menu) and are not part of the URDF import.
 # ---------------------------------------------------------------------------
 OBJECT_PATHS = {
     "arm_joints": [
-        "/Fetch/shoulder_pan_joint",
-        "/Fetch/shoulder_lift_joint",
-        "/Fetch/upperarm_roll_joint",
-        "/Fetch/elbow_flex_joint",
-        "/Fetch/forearm_roll_joint",
-        "/Fetch/wrist_flex_joint",
-        "/Fetch/wrist_roll_joint",
+        "/shoulder_pan_joint",
+        "/shoulder_lift_joint",
+        "/upperarm_roll_joint",
+        "/elbow_flex_joint",
+        "/forearm_roll_joint",
+        "/wrist_flex_joint",
+        "/wrist_roll_joint",
     ],
     "finger_joints": [
-        "/Fetch/l_gripper_finger_joint",
-        "/Fetch/r_gripper_finger_joint",
+        "/l_gripper_finger_joint",
+        "/r_gripper_finger_joint",
     ],
-    "gripper_tip": "/Fetch/IKTip",
-    "ik_target": "/IKTarget",
-    "ik_group_name": "FetchIK",  # VERIFY: name of the IK group as created in the IK plugin dialog
-    "push_object": "/PushObject",
-    "goal_marker": "/GoalMarker",
+    "gripper_tip": "/IKTip",  # dummy, parented to gripper_link — add by hand
+    "ik_target": "/IKTarget",  # dummy, free-standing — add by hand
+    "ik_group_name": "FetchIK",  # VERIFY: name of the IK group as created via the Modules menu
+    "push_object": "/PushObject",  # dynamic+respondable cuboid — add by hand
+    "goal_marker": "/GoalMarker",  # non-dynamic, non-respondable — add by hand
 }
 
 # Workspace bounds for sampling the object's initial position and the goal position, relative

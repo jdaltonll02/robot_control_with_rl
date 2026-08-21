@@ -62,17 +62,69 @@ maintained), plus `pyzmq` and `cbor2`.
      --package-name fetch_description \
      --package-dir scripts/coppeliasim/assets/fetch_ros/fetch_description
    ```
-4. **Import into CoppeliaSim:** Plugins → URDF Import → select `fetch_fixed.urdf`. This
-   produces a tree of link/joint objects for the real 7-DOF Fetch arm + torso + gripper.
-5. **Add task objects:**
-   - A dynamic, respondable cube — name it `PushObject`.
-   - A non-dynamic, non-respondable (purely visual) sphere or cube — name it `GoalMarker`.
-6. **Set up the IK group** (the CoppeliaSim analog of MuJoCo's mocap-weld mechanism):
-   - Add a dummy welded to the gripper's attachment frame — name it `IKTip`.
-   - Add a second, freely-movable dummy that the Python side will reposition every step —
-     name it `IKTarget`.
-   - Using the IK plugin dialog, create an IK group (suggested name `FetchIK`) whose tip is
-     `IKTip` and whose target is `IKTarget`, covering the arm's joint chain.
+3. **Import into CoppeliaSim:** `Modules → Importers → URDF importer...` → select
+   `fetch_fixed.urdf` (menu path confirmed against CoppeliaSim EDU 4.3+ — older docs/tutorials
+   may say "Plugins", that's an outdated menu name). This produces a tree of link/joint
+   objects for the real 7-DOF Fetch arm + torso + gripper, named after the URDF's own joint
+   names (`shoulder_pan_joint`, `elbow_flex_joint`, `l_gripper_finger_joint`, etc.), each
+   nested under a `*_link_respondable` object (the physical/collision body) with a
+   `*_link_visual` child (the pure appearance mesh) — this is exactly what `OBJECT_PATHS`
+   in `fetch_push_env_coppeliasim.py` is already written against, confirmed against a real
+   import. There's no top-level "Fetch" grouping object — the chain starts directly at
+   `base_link_respondable`.
+
+4. **Add a table.** The URDF import only brings in the robot — right now it would be
+   standing on bare floor with nothing to push things across. `Add → Shape → Primitive
+   shape → Cuboid`, size it flat and roughly table-height (e.g. 0.6m × 0.6m × 0.05m, top
+   surface somewhere around the height the gripper naturally hangs at when the arm is in a
+   neutral pose — eyeball it against the rendered robot). Rename it `Table` (double-click its
+   name in the Scene hierarchy, or right-click → Rename). Leave "Body is dynamic" **unchecked**
+   (it shouldn't fall or move) but leave "Body is respondable" **checked** (so things can
+   rest on it and the robot can't pass through it) — these two checkboxes are on the shape's
+   properties dialog, opened by double-clicking the shape in the 3D view or in the Scene
+   hierarchy.
+
+5. **Add `PushObject`.** `Add → Shape → Primitive shape → Cuboid` again, this time small
+   (a few cm per side), positioned sitting on top of the table. Rename it `PushObject`. Open
+   its properties dialog and check **both** "Body is dynamic" (gravity/physics affects it —
+   this is the thing that gets pushed) **and** "Body is respondable" (so the gripper and table
+   can actually collide with it instead of passing through).
+
+6. **Add `GoalMarker`.** `Add → Shape → Primitive shape → Sphere` (or cuboid), small, also on
+   the table, some distance from `PushObject`. Rename it `GoalMarker`. Leave **both** "Body is
+   dynamic" and "Body is respondable" **unchecked** — this is a pure visual marker for where
+   the object should end up, it must never physically interact with anything (a respondable
+   goal marker would itself become an obstacle the object bumps into, which isn't the task).
+   Optionally give it a distinct color (right-click → Edit → Shape color, or the color
+   toolbar icon) so it's easy to see in a screenshot.
+
+7. **Set up the IK group** (the CoppeliaSim analog of MuJoCo's mocap-weld mechanism):
+   - `Add → Dummy` — this creates a small axis-marker object. Rename it `IKTip`.
+     **Parent it to the gripper** by dragging `IKTip` onto `gripper_link_respondable` in the
+     Scene hierarchy tree (drag-and-drop reparents it). After reparenting, open `IKTip`'s
+     properties dialog and set its **position relative to its parent** to `(0, 0, 0)` (or a
+     small forward offset if you want the IK tip to sit between the two gripper fingers
+     rather than at the wrist) — this makes it move rigidly with the gripper from now on,
+     exactly like the point MuJoCo's mocap weld attaches to.
+   - `Add → Dummy` again for the second one — rename it `IKTarget`. Leave it **unparented**
+     (directly under the scene root) — this is the one the Python side repositions every
+     training step. Before you move on, set its starting position to match `IKTip`'s current
+     *world* position (open both dummies' properties dialogs and copy the world X/Y/Z from
+     one to the other, or use `Edit → Align to...` with `IKTip` as reference) — starting them
+     coincident avoids a large, jarring IK jump the moment the simulation starts.
+   - `Modules → Kinematics → Inverse kinematics generator...` — this is the dialog confirmed
+     present in your CoppeliaSim EDU build (menu path verified against your screenshot).
+     Create a new IK group, name it `FetchIK` (must match `ik_group_name` in `OBJECT_PATHS`),
+     and add an IK element within it with **tip = `IKTip`** and **target = `IKTarget`**.
+     CoppeliaSim determines which joints are "in the chain" by walking up `IKTip`'s parent
+     hierarchy until it hits a base object — since `IKTip` is parented under
+     `gripper_link_respondable`, that walk naturally passes through all 7 arm joints
+     (`wrist_roll_joint` up through `shoulder_pan_joint`) before reaching `torso_lift_link_
+     respondable`. If the dialog asks for an explicit "base" object, use
+     `torso_lift_link_respondable` — that excludes the torso-lift and wheel joints from the
+     IK chain, which is what we want (the original task doesn't move the torso either). Leave
+     the solving method on its default. Send me a screenshot of this dialog if the fields
+     don't match this description — I can't see your actual version's exact layout.
    - **Fidelity note**: MuJoCo's mocap+weld is resolved *compliantly* by the physics solver
      every one of its 20 internal substeps per control step — it's not a one-shot IK solve.
      `simIK.handleIkGroup` is a one-shot solve per call. The wrapper compensates by calling it
@@ -82,12 +134,20 @@ maintained), plus `pyzmq` and `cbor2`.
      directly. This is the single biggest behavioral difference from the MuJoCo original and
      the most likely thing to need hand-tuning (PD gains, step count) once you can actually
      run it.
-7. **Save the scene** as `scripts/coppeliasim/assets/fetch_push_scene.ttt` (also untracked,
-   like the URDF assets — binary, local-only).
-8. **Update `OBJECT_PATHS`** at the top of `scripts/fetch_push_env_coppeliasim.py` to match
-   whatever names/paths your imported model tree actually uses (URDF import doesn't
-   necessarily preserve names exactly as listed above — check the scene hierarchy after
-   import and adjust the dict, it's the only place these names live).
+
+8. **Save the scene.** `Scenes → Save scene as...` (a top-level menu, separate from `File`,
+   confirmed in your version's menu bar) → save as
+   `scripts/coppeliasim/assets/fetch_push_scene.ttt` (also untracked, like the URDF assets —
+   binary, local-only). If your version doesn't have a `Scenes` menu, use `File → Save Scene
+   As...` instead.
+
+9. **Confirm/update `OBJECT_PATHS`** at the top of `scripts/fetch_push_env_coppeliasim.py`.
+    The arm/finger joint names are already updated to match a real import (no `/Fetch/`
+    prefix — CoppeliaSim resolves `"/name"` by unique alias regardless of nesting, so
+    `/IKTip` still resolves correctly even though it's parented under
+    `gripper_link_respondable`). Just double check `push_object`, `goal_marker`,
+    `gripper_tip`, `ik_target`, and `ik_group_name` match exactly what you named things above
+    — that dict is the *only* place these names live in the code.
 
 ## Running it
 
