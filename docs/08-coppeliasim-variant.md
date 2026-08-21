@@ -39,25 +39,28 @@ pip install -r scripts/coppeliasim/requirements_coppeliasim.txt
 
 This installs `coppeliasim-zmqremoteapi-client` (the current officially maintained CoppeliaSim
 Python API — chosen over PyRep, which is tied to CoppeliaSim ~4.1 and less actively
-maintained), plus `pyzmq`, `cbor2`, and `xacro`.
+maintained), plus `pyzmq` and `cbor2`.
 
 ## Building the scene (manual, in the CoppeliaSim GUI — this is on you)
 
-1. **Get the Fetch URDF.** Clone `fetch_ros` (specifically the `fetch_description` package)
-   somewhere local, e.g. `scripts/coppeliasim/assets/fetch_description/` (this directory is
-   *not* committed — treat it like `venv/`, present locally and untracked).
-2. **Resolve the xacro:**
+1. **Get the Fetch URDF.** Clone the public `fetch_ros` repo somewhere local:
    ```bash
-   xacro fetch_description/robots/fetch.urdf.xacro > scripts/coppeliasim/assets/fetch.urdf
+   cd scripts/coppeliasim/assets
+   git clone --depth 1 https://github.com/fetchrobotics/fetch_ros.git
    ```
-3. **Fix up mesh paths** so CoppeliaSim's URDF importer can resolve them (it doesn't
-   understand ROS's `package://` URIs):
+   (no git available? download the ZIP from that URL in a browser instead). This directory
+   is *not* committed — treat it like `venv/`, present locally and untracked. It already
+   contains a plain, pre-resolved URDF at `fetch_ros/fetch_description/robots/fetch.urdf` —
+   **no xacro conversion needed**, that file is ready to use as-is.
+2. **Fix up mesh paths** so CoppeliaSim's URDF importer can resolve them (it doesn't
+   understand ROS's `package://` URIs — those only mean something inside a full ROS install,
+   which this project doesn't have):
    ```bash
    python scripts/coppeliasim/convert_urdf_paths.py \
-     --input scripts/coppeliasim/assets/fetch.urdf \
+     --input scripts/coppeliasim/assets/fetch_ros/fetch_description/robots/fetch.urdf \
      --output scripts/coppeliasim/assets/fetch_fixed.urdf \
      --package-name fetch_description \
-     --package-dir scripts/coppeliasim/assets/fetch_description
+     --package-dir scripts/coppeliasim/assets/fetch_ros/fetch_description
    ```
 4. **Import into CoppeliaSim:** Plugins → URDF Import → select `fetch_fixed.urdf`. This
    produces a tree of link/joint objects for the real 7-DOF Fetch arm + torso + gripper.
