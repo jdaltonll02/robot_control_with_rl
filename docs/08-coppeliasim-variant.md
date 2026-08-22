@@ -112,28 +112,34 @@ maintained), plus `pyzmq` and `cbor2`.
      *world* position (open both dummies' properties dialogs and copy the world X/Y/Z from
      one to the other, or use `Edit → Align to...` with `IKTip` as reference) — starting them
      coincident avoids a large, jarring IK jump the moment the simulation starts.
-   - `Modules → Kinematics → Inverse kinematics generator...` — this is the dialog confirmed
-     present in your CoppeliaSim EDU build (menu path verified against your screenshot).
-     Create a new IK group, name it `FetchIK` (must match `ik_group_name` in `OBJECT_PATHS`),
-     and add an IK element within it with **tip = `IKTip`** and **target = `IKTarget`**.
-     CoppeliaSim determines which joints are "in the chain" by walking up `IKTip`'s parent
-     hierarchy until it hits a base object — since `IKTip` is parented under
-     `gripper_link_respondable`, that walk naturally passes through all 7 arm joints
-     (`wrist_roll_joint` up through `shoulder_pan_joint`) before reaching `torso_lift_link_
-     respondable`. If the dialog asks for an explicit "base" object, use
-     `torso_lift_link_respondable` — that excludes the torso-lift and wheel joints from the
-     IK chain, which is what we want (the original task doesn't move the torso either). Leave
-     the solving method on its default. Send me a screenshot of this dialog if the fields
-     don't match this description — I can't see your actual version's exact layout.
+   - `Modules → Kinematics → Inverse kinematics generator...` — confirmed present in your
+     CoppeliaSim EDU build. This is a **wizard**, not a raw IK-group dialog: it generates a
+     self-running child script attached to the robot model that resolves IK automatically
+     every simulation step, rather than something the Python side has to trigger manually.
+     Fill in: **Robot model** = the Fetch model (should be the only option), **Robot base** =
+     `torso_lift_link_respondable` (excludes torso-lift/wheel joints from the solved chain —
+     the original task doesn't move the torso either), **Robot tip** = `IKTip`, **Robot
+     target** = `IKTarget`, **Joint group** = leave empty ("use all joints in the tip-target
+     chain" is exactly right — that's the 7 arm joints). Leave Position X/Y/Z and Orientation
+     Alpha+Beta/Gamma all checked (we want the fixed end-effector orientation constrained too,
+     matching MuJoCo). Leave the solver defaults (10 iterations, 0.1 damping) for now — this is
+     exactly the kind of thing flagged below for later tuning. Under Handling, keep "Allow
+     error" and "Enabled"/"During simulation" checked — "Allow error" matters: without it, the
+     script may freeze the arm entirely rather than best-effort-solving when the target is
+     briefly unreachable. Click Generate.
+   - Because this wizard's script runs automatically every simulation step (as long as
+     "During simulation" is checked), the Python wrapper does **not** call any `simIK`
+     function directly — it only moves `IKTarget`'s position/orientation and then calls
+     `client.step()`, and the scene's own generated script does the rest. This is actually a
+     *closer* match to MuJoCo's continuously-resolved mocap-weld than the originally-planned
+     "one manual `simIK.handleIkGroup()` call per env step" would have been — updated in
+     `fetch_push_env_coppeliasim.py` accordingly.
    - **Fidelity note**: MuJoCo's mocap+weld is resolved *compliantly* by the physics solver
-     every one of its 20 internal substeps per control step — it's not a one-shot IK solve.
-     `simIK.handleIkGroup` is a one-shot solve per call. The wrapper compensates by calling it
-     once per control step to get target joint angles, applying them via
-     `sim.setJointTargetPosition` on **position-controlled dynamic joints**, and stepping
-     physics several times to let the engine's PD servo converge — not by teleporting joints
-     directly. This is the single biggest behavioral difference from the MuJoCo original and
-     the most likely thing to need hand-tuning (PD gains, step count) once you can actually
-     run it.
+     every one of its 20 internal substeps per control step. The wizard-generated script
+     resolves similarly — once per simulation step, not once per env step — via the arm's
+     **position-controlled dynamic joints**, letting the engine's PD servo converge as physics
+     advances. The solver's iteration count/damping factor (set in the wizard above) are the
+     most likely things to need hand-tuning once you can actually run it.
 
 8. **Save the scene.** `Scenes → Save scene as...` (a top-level menu, separate from `File`,
    confirmed in your version's menu bar) → save as
@@ -146,8 +152,9 @@ maintained), plus `pyzmq` and `cbor2`.
     prefix — CoppeliaSim resolves `"/name"` by unique alias regardless of nesting, so
     `/IKTip` still resolves correctly even though it's parented under
     `gripper_link_respondable`). Just double check `push_object`, `goal_marker`,
-    `gripper_tip`, `ik_target`, and `ik_group_name` match exactly what you named things above
-    — that dict is the *only* place these names live in the code.
+    `gripper_tip`, and `ik_target` match exactly what you named things above — that dict is
+    the *only* place these names live in the code. (There's no `ik_group_name` entry anymore
+    — the IK wizard's generated script doesn't need to be looked up from Python.)
 
 ## Running it
 

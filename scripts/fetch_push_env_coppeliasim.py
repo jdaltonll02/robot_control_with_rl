@@ -59,7 +59,6 @@ OBJECT_PATHS = {
     ],
     "gripper_tip": "/IKTip",  # dummy, parented to gripper_link — add by hand
     "ik_target": "/IKTarget",  # dummy, free-standing — add by hand
-    "ik_group_name": "FetchIK",  # VERIFY: name of the IK group as created via the Modules menu
     "push_object": "/PushObject",  # dynamic+respondable cuboid — add by hand
     "goal_marker": "/GoalMarker",  # non-dynamic, non-respondable — add by hand
 }
@@ -133,7 +132,8 @@ class FetchPushCoppeliaSimEnv(gym.Env):
         # (defaults are usually fine for a single local instance).
         self._client = RemoteAPIClient(host=host, port=port)
         self.sim = self._client.require("sim")
-        self.simIK = self._client.require("simIK")
+        # No simIK connection needed here — IK is resolved by the scene's own generated
+        # child script (see docs/08-coppeliasim-variant.md), not called from Python directly.
 
         self._resolve_handles()
         self.sim.setStepping(True)
@@ -161,12 +161,12 @@ class FetchPushCoppeliaSimEnv(gym.Env):
         self._push_object_handle = sim.getObject(OBJECT_PATHS["push_object"])
         self._goal_marker_handle = sim.getObject(OBJECT_PATHS["goal_marker"])
 
-        # VERIFY: this assumes the IK group was created in the scene via the IK plugin dialog
-        # (docs/08-coppeliasim-variant.md step 6) and is retrievable by name. Newer CoppeliaSim
-        # versions (4.5+) may prefer building the IK environment programmatically via
-        # simIK.createIkEnvironment()/createIkGroup() instead — if getIkGroupHandle fails with
-        # your installed version, that's the alternative to switch to.
-        self._ik_group_handle = self.simIK.getIkGroupHandle(OBJECT_PATHS["ik_group_name"])
+        # No explicit IK group handle needed: the scene uses CoppeliaSim's "Inverse Kinematics
+        # generator" add-on, which generates a self-running child script on the robot model
+        # that resolves IK automatically every simulation step (with "During simulation"
+        # enabled) as long as IKTarget's pose is set before each client.step() call — this is
+        # a closer match to MuJoCo's continuously-resolved mocap-weld than a single Python-side
+        # simIK.handleIkGroup() call per env.step() would have been, so we don't call it here.
 
         self._sim_dt = self.sim.getFloatParam(self.sim.floatparam_simulation_time_step)
 
@@ -291,7 +291,7 @@ class FetchPushCoppeliaSimEnv(gym.Env):
     # -----------------------------------------------------------------
 
     def _apply_action_and_step(self, action):
-        sim, simIK = self.sim, self.simIK
+        sim = self.sim
         delta = np.asarray(action[:3], dtype=np.float64) * ACTION_POS_SCALE
 
         current_target_pos = np.array(sim.getObjectPosition(self._ik_target_handle, -1))
@@ -302,11 +302,12 @@ class FetchPushCoppeliaSimEnv(gym.Env):
         if self._home_ik_target_quat is not None:
             sim.setObjectQuaternion(self._ik_target_handle, -1, self._home_ik_target_quat)
 
-        simIK.handleIkGroup(self._ik_group_handle)
-
         for h in self._finger_joint_handles:
             sim.setJointTargetPosition(h, FINGER_CLOSED_POS)
 
+        # No explicit IK solve call here: the scene's generated IK child script (see
+        # docs/08-coppeliasim-variant.md) resolves the arm toward IKTarget automatically on
+        # every one of these steps, since it runs "during simulation".
         for _ in range(self.substeps_per_step):
             self._client.step()
 

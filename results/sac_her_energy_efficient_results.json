@@ -1,0 +1,21 @@
+{
+  "experiment": "reward_energy_efficient_sac",
+  "algorithm": "SAC",
+  "reward_type": "energy_efficient",
+  "env_id": "FetchPushFlat-v0",
+  "success_rate": 0.06,
+  "mean_episode_return": -7.143781011213937,
+  "mean_episode_length": 50.0,
+  "mean_energy": 0.19680848717689514,
+  "total_timesteps": 250000,
+  "training_wall_time_minutes": 0.0,
+  "n_eval_episodes": 100,
+  "domain_randomization": {
+    "object_mass_multiplier": 1.0,
+    "friction_multiplier": 1.0,
+    "object_size_multiplier": 1.0
+  },
+  "hardware": "unknown",
+  "seed": 42,
+  "notes": ""
+}

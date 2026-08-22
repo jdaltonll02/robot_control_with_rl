@@ -16,8 +16,8 @@ shaping interacts with goal relabeling, and how SAC and DDPG differ in practice.
 <td align="center"><img src="assets/fetch_push_success.gif" width="300" alt="Trained SAC+HER policy — robot successfully pushes object to target"/></td>
 </tr>
 <tr>
-<td align="center">~5% success rate</td>
-<td align="center">~99% success rate</td>
+<td align="center">6% success rate (measured)</td>
+<td align="center">95–99% success rate (measured)</td>
 </tr>
 </table>
 
@@ -37,8 +37,9 @@ shaping interacts with goal relabeling, and how SAC and DDPG differ in practice.
 **For a detailed, diagrammed walkthrough of the methodology and the end-to-end pipeline,
 see [`docs/`](docs/README.md).** The docs cover the sparse-reward problem, exactly how HER
 relabeling works in this codebase, the SAC/DDPG architectures and hyperparameters, the
-reward functions and their HER-compatibility constraints, domain randomization, and the
-evaluation pipeline — with diagrams for each.
+reward functions and their HER-compatibility constraints, domain randomization, the
+evaluation pipeline, and the [overall architecture](docs/architecture.md) — with diagrams for
+each.
 
 ## Why HER
 
@@ -54,24 +55,106 @@ reward accordingly. This turns most failed episodes into useful training data, w
 changing the environment or the algorithm's core update rule — it only changes what the
 replay buffer returns.
 
+## Results
+
+Full experiment matrix, all trained for 250K timesteps (500K for the domain-randomization
+run) on this repo's exact scripts/hyperparameters, evaluated over 100 episodes (50 for the
+robustness grid) via `scripts/evaluate_policy.py`. Raw JSON for every row is in `results/`.
+
+### Algorithm × HER
+
+| Configuration | Success rate | Mean return |
+|---|---|---|
+| SAC, no HER | 6% | -47.0 |
+| **SAC + HER** | **95–99%** | ≈ -12 to -14 |
+| DDPG + HER | 6% | -47.0 |
+
+The no-HER baseline demonstrates the sparse-reward problem this whole project is built
+around: random exploration reaches the goal by chance only ~6% of the time, giving a standard
+replay buffer almost no positive signal to learn from. HER turns that around dramatically —
+same algorithm, same network, the only change is what `rb.sample()` returns.
+
+DDPG + HER's result is a real, investigated finding, not a leftover bug: its training curve
+is flat at random-baseline level for the *entire* 250K steps, with `mean_energy` pinned at
+exactly 3.0 (three action dimensions all saturated at ±1 — a collapsed, degenerate policy).
+This matches a known DDPG failure mode — no twin critics, no entropy regularization, prone to
+converging early on an inaccurate Q-function and never escaping — that SAC's design
+specifically guards against. See [docs/04-algorithms.md](docs/04-algorithms.md#sac-vs-ddpg--summary)
+for the full explanation.
+
+### Reward engineering (SAC + HER)
+
+| Reward type | Success rate |
+|---|---|
+| **sparse** | **95–99%** |
+| `dense_basic` | 6% (flat the entire run — never learned) |
+| `progress_bonus` | 67% |
+| `energy_efficient` | 6% (flat the entire run — never learned) |
+
+Sparse wins outright. `dense_basic` and `energy_efficient` share the same failure signature
+as DDPG above — a flat training curve from step 0 — but for a different reason: neither has a
+discontinuity at the success boundary the way `sparse`'s `0`-if-success-else-`-1` does, so
+HER's relabeling has nothing sharp to reinforce. This reproduces a result from the original
+HER paper itself: naive reward shaping can *underperform* sparse+HER on manipulation tasks.
+`progress_bonus` (which adds an explicit success bonus on top of a shaping term) partially
+recovers, reaching 67% — better than pure shaping, still well short of sparse. See
+[docs/03-reward-engineering.md](docs/03-reward-engineering.md) for the reward formulas.
+
+### Domain randomization & robustness
+
+SAC + HER trained for 500K steps with object mass ∈ [0.5×, 2.0×], friction ∈ [0.5×, 2.0×],
+and size ∈ [0.8×, 1.2×] all randomized every episode reset converged to **~93–94% success**
+under continuously shifting physics — despite never seeing the same physical setup twice.
+
+Robustness grid — the DR-trained checkpoint vs. the nominal-trained one, each evaluated at a
+*fixed* physics shift away from nominal (50 episodes per cell):
+
+| Mass multiplier | Nominal-trained | DR-trained |
+|---|---|---|
+| 0.5× | 96% | 86% |
+| 1.0× | 100% | 100% |
+| 1.5× | 96% | 100% |
+| 2.0× | 96% | 98% |
+
+| Friction multiplier | Nominal-trained | DR-trained |
+|---|---|---|
+| 0.5× | 94% | 100% |
+| 1.0× | 94% | 96% |
+| 1.5× | 100% | 100% |
+| 2.0× | 94% | 98% |
+
+**Honest reading, not the textbook one**: the expected "nominal-trained falls off a cliff away
+from 1.0×, DR-trained degrades gracefully" pattern doesn't clearly show up here — both models
+stay in the 86–100% band across the full tested range. Most plausible explanation: quasi-static
+pushing is fairly forgiving of moderate mass/friction shifts on its own, so this task doesn't
+stress-test domain randomization as hard as, say, dynamic/contact-rich manipulation would. With
+only 50 episodes per cell, gaps under ~10 points (e.g. 96% vs. 86% at 0.5× mass) are within
+noise, not necessarily a real effect. See [docs/05-domain-randomization.md](docs/05-domain-randomization.md).
+
 ## Repository layout
 
 ```
 .
 ├── README.md                    # this file
-├── docs/                        # detailed methodology + pipeline documentation
+├── docs/                        # detailed methodology + pipeline + architecture documentation
 ├── scripts/
 │   ├── fetch_push_env.py        # env wrapper: flattening, reward functions, domain randomization
 │   ├── her_replay_buffer.py     # HER replay buffer (future-strategy relabeling)
 │   ├── sac_fetchpush.py         # SAC training script (CleanRL-based)
 │   ├── ddpg_fetchpush.py        # DDPG training script (CleanRL-based)
 │   ├── evaluate_policy.py       # loads a checkpoint, evaluates, writes results JSON
-│   └── cleanrl_utils/buffers.py # CleanRL's standard (non-HER) replay buffer
-├── results/                     # evaluation results (JSON, one per experiment)
+│   ├── cleanrl_utils/buffers.py # CleanRL's standard (non-HER) replay buffer
+│   ├── fetch_push_env_coppeliasim.py     # experimental: same contract, CoppeliaSim-backed
+│   ├── sac_fetchpush_coppeliasim.py      # experimental: SAC on CoppeliaSim
+│   ├── ddpg_fetchpush_coppeliasim.py     # experimental: DDPG on CoppeliaSim
+│   ├── evaluate_policy_coppeliasim.py    # experimental: evaluator for CoppeliaSim checkpoints
+│   └── coppeliasim/                      # scene assets + setup helpers for the above
+├── results/                     # evaluation results (JSON, one per experiment) — see README Results
 ├── figures/                     # plots (training curves, comparisons)
 ├── videos/                      # recorded rollouts
 ├── assets/                      # README gifs
-└── verify_custom_env.py         # quick sanity check for the custom env
+├── verify_custom_env.py         # quick sanity check for the custom env
+└── verify_custom_env_coppeliasim.py  # sanity check + throughput probe for the CoppeliaSim variant
 ```
 
 ## Setup
@@ -105,21 +188,21 @@ Expected output: a flattened `(31,)` observation and a `Box(-1, 1, (4,))` action
 ## Training
 
 ```bash
-# Baseline: SAC without HER — expect ~5% success (demonstrates the sparse-reward problem)
+# Baseline: SAC without HER — measured 6% success (demonstrates the sparse-reward problem)
 python scripts/sac_fetchpush.py \
   --reward-type sparse \
   --total-timesteps 250000 \
   --track --wandb-project-name rl-fetch-push \
   --exp-name sac-baseline-no-her --seed 42
 
-# SAC + HER — expect success rate to climb from ~5% to >50% by ~80K steps, >90% by 200K
+# SAC + HER — measured 95-99% success (see Results below for the full training curve)
 python scripts/sac_fetchpush.py \
   --reward-type sparse --her \
   --total-timesteps 250000 \
   --track --wandb-project-name rl-fetch-push \
   --exp-name sac-her-sparse --seed 42
 
-# DDPG + HER
+# DDPG + HER — measured 6% success; see Results below, this is a real algorithmic finding
 python scripts/ddpg_fetchpush.py \
   --reward-type sparse --her \
   --total-timesteps 250000 \
@@ -148,6 +231,16 @@ python scripts/evaluate_policy.py \
 
 This produces a JSON with success rate, mean return, episode length, and mean action energy —
 see [`docs/06-evaluation.md`](docs/06-evaluation.md) for the full schema and metric definitions.
+
+## Experimental: CoppeliaSim backend
+
+A second, independent backend for the same task runs on CoppeliaSim instead of MuJoCo, using
+the real Fetch robot's URDF, without modifying any file listed above — every relevant script
+has a `_coppeliasim.py` counterpart that reuses the HER buffer and reward math unmodified and
+reimplements only what's genuinely simulator-specific (observation construction, IK-based
+action application, domain randomization). It's still being brought up and isn't part of the
+Results section above. See [`docs/08-coppeliasim-variant.md`](docs/08-coppeliasim-variant.md)
+for setup and known gaps.
 
 ## Background reading
 

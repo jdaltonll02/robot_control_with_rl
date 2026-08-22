@@ -18,6 +18,10 @@ Start at the top and work down, or jump straight to the piece you care about.
    the results JSON schema.
 7. **[End-to-End Pipeline](07-pipeline.md)** — how all of the above connects, from
    environment reset to a results file on disk.
+8. **[CoppeliaSim Variant](08-coppeliasim-variant.md)** — experimental second backend on the
+   real Fetch URDF via CoppeliaSim, reusing the HER buffer and reward math unmodified.
+9. **[Architecture](architecture.md)** — the static module-boundary view: what each file
+   owns, the shared obs/action contract that lets backends swap, and key design decisions.
 
 ## Map of the codebase
 
@@ -29,3 +33,4 @@ Start at the top and work down, or jump straight to the piece you care about.
 | `scripts/ddpg_fetchpush.py` | DDPG training loop | [04](04-algorithms.md), [07](07-pipeline.md) |
 | `scripts/evaluate_policy.py` | Checkpoint loading + evaluation + results JSON | [06](06-evaluation.md) |
 | `scripts/cleanrl_utils/buffers.py` | CleanRL's standard (non-HER) replay buffer | [07](07-pipeline.md) |
+| `scripts/fetch_push_env_coppeliasim.py` + `*_coppeliasim.py` variants | Experimental CoppeliaSim backend | [08](08-coppeliasim-variant.md), [architecture](architecture.md) |
