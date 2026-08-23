@@ -1,4 +1,4 @@
-<robot name="fetch">
+<robot name="fetch"><mujoco><compiler meshdir="C:/Users/rabia/Dalton/robot_control_with_rl/scripts/coppeliasim/assets/fetch_ros/fetch_description/meshes" strippath="true" balanceinertia="true" discardvisual="true"/></mujoco>
   <link name="base_link">
     <inertial>
       <origin rpy="0 0 0" xyz="-0.0036 0.0 0.0014" />

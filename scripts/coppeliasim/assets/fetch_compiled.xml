@@ -1,0 +1,110 @@
+<mujoco model="fetch">
+  <compiler angle="radian" meshdir="C:/Users/rabia/Dalton/robot_control_with_rl/scripts/coppeliasim/assets/fetch_ros/fetch_description/meshes/"/>
+
+  <asset>
+    <mesh name="base_link_collision" content_type="model/stl" file="base_link_collision.STL"/>
+    <mesh name="r_wheel_link_collision" content_type="model/stl" file="r_wheel_link_collision.STL"/>
+    <mesh name="l_wheel_link_collision" content_type="model/stl" file="l_wheel_link_collision.STL"/>
+    <mesh name="torso_lift_link_collision" content_type="model/stl" file="torso_lift_link_collision.STL"/>
+    <mesh name="head_pan_link_collision" content_type="model/stl" file="head_pan_link_collision.STL"/>
+    <mesh name="head_tilt_link_collision" content_type="model/stl" file="head_tilt_link_collision.STL"/>
+    <mesh name="shoulder_pan_link_collision" content_type="model/stl" file="shoulder_pan_link_collision.STL"/>
+    <mesh name="shoulder_lift_link_collision" content_type="model/stl" file="shoulder_lift_link_collision.STL"/>
+    <mesh name="upperarm_roll_link_collision" content_type="model/stl" file="upperarm_roll_link_collision.STL"/>
+    <mesh name="elbow_flex_link_collision" content_type="model/stl" file="elbow_flex_link_collision.STL"/>
+    <mesh name="forearm_roll_link_collision" content_type="model/stl" file="forearm_roll_link_collision.STL"/>
+    <mesh name="wrist_flex_link_collision" content_type="model/stl" file="wrist_flex_link_collision.STL"/>
+    <mesh name="wrist_roll_link_collision" content_type="model/stl" file="wrist_roll_link_collision.STL"/>
+    <mesh name="gripper_link" content_type="model/stl" file="gripper_link.STL"/>
+    <mesh name="r_gripper_finger_link" content_type="model/stl" file="r_gripper_finger_link.STL"/>
+    <mesh name="l_gripper_finger_link" content_type="model/stl" file="l_gripper_finger_link.STL"/>
+    <mesh name="bellows_link_collision" content_type="model/stl" file="bellows_link_collision.STL"/>
+    <mesh name="estop_link" content_type="model/stl" file="estop_link.STL"/>
+    <mesh name="laser_link" content_type="model/stl" file="laser_link.STL"/>
+    <mesh name="torso_fixed_link" content_type="model/stl" file="torso_fixed_link.STL"/>
+  </asset>
+
+  <worldbody>
+    <geom type="mesh" rgba="0.356 0.361 0.376 1" mesh="base_link_collision"/>
+    <geom pos="-0.12465 0.23892 0.31127" quat="0.707105 0.707108 0 0" type="mesh" rgba="0.8 0 0 1" mesh="estop_link"/>
+    <geom pos="0.235 0 0.2878" quat="0 1 0 0" type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="laser_link"/>
+    <geom pos="-0.086875 0 0.377425" type="mesh" rgba="0.086 0.506 0.767 1" mesh="torso_fixed_link"/>
+    <body name="r_wheel_link" pos="0.0012914 -0.18738 0.055325">
+      <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="4.3542" diaginertia="0.005 0.0045 0.0045"/>
+      <joint name="r_wheel_joint" pos="0 0 0" axis="0 1 0" actuatorfrcrange="-8.85 8.85"/>
+      <geom type="mesh" rgba="0.086 0.506 0.767 1" mesh="r_wheel_link_collision"/>
+    </body>
+    <body name="l_wheel_link" pos="0.0012914 0.18738 0.055325">
+      <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="4.3542" diaginertia="0.005 0.0045 0.0045"/>
+      <joint name="l_wheel_joint" pos="0 0 0" axis="0 1 0" actuatorfrcrange="-8.85 8.85"/>
+      <geom type="mesh" rgba="0.086 0.506 0.767 1" mesh="l_wheel_link_collision"/>
+    </body>
+    <body name="torso_lift_link" pos="-0.086875 0 0.37743">
+      <inertial pos="-0.000983929 -0.000886078 0.286874" quat="0.99962 -0.000833361 0.0269789 0.00565622" mass="10.949" diaginertia="0.370106 0.367813 0.0963668"/>
+      <joint name="torso_lift_joint" pos="0 0 0" axis="0 0 1" type="slide" range="0 0.38615" actuatorfrcrange="-450 450" damping="100"/>
+      <geom type="mesh" rgba="1 1 1 1" mesh="torso_lift_link_collision"/>
+      <geom type="mesh" rgba="0 0 0 1" mesh="bellows_link_collision"/>
+      <body name="head_pan_link" pos="0.053125 0 0.603001">
+        <inertial pos="0.0321 0.0161 0.039" quat="0.514814 0.545129 -0.452957 0.482318" mass="2.2556" diaginertia="0.0184878 0.0128242 0.00948808"/>
+        <joint name="head_pan_joint" pos="0 0 0" axis="0 0 1" range="-1.57 1.57" actuatorfrcrange="-0.32 0.32"/>
+        <geom type="mesh" rgba="0.356 0.361 0.376 1" mesh="head_pan_link_collision"/>
+        <body name="head_tilt_link" pos="0.14253 0 0.057999">
+          <inertial pos="0.0081 0.0025 0.0113" quat="0.645806 0.659961 -0.274048 0.268857" mass="0.9087" diaginertia="0.00630102 0.00590111 0.00139787"/>
+          <joint name="head_tilt_joint" pos="0 0 0" axis="0 1 0" range="-0.76 1.45" actuatorfrcrange="-0.68 0.68"/>
+          <geom type="mesh" rgba="0.086 0.506 0.767 1" mesh="head_tilt_link_collision"/>
+        </body>
+      </body>
+      <body name="shoulder_pan_link" pos="0.119525 0 0.34858">
+        <inertial pos="0.0927 -0.0056 0.0564" quat="-0.136432 0.762398 -0.156155 0.612985" mass="2.5587" diaginertia="0.00896934 0.00864854 0.00408212"/>
+        <joint name="shoulder_pan_joint" pos="0 0 0" axis="0 0 1" range="-1.6056 1.6056" actuatorfrcrange="-33.82 33.82" damping="1"/>
+        <geom type="mesh" rgba="1 1 1 1" mesh="shoulder_pan_link_collision"/>
+        <body name="shoulder_lift_link" pos="0.117 0 0.06">
+          <inertial pos="0.1432 0.0072 -0.0001" quat="0.438152 0.438152 0.554998 0.554998" mass="2.6615" diaginertia="0.0116011 0.0112 0.00229892"/>
+          <joint name="shoulder_lift_joint" pos="0 0 0" axis="0 1 0" range="-1.221 1.518" actuatorfrcrange="-131.76 131.76" damping="1"/>
+          <geom type="mesh" rgba="0.086 0.506 0.767 1" mesh="shoulder_lift_link_collision"/>
+          <body name="upperarm_roll_link" pos="0.219 0 0">
+            <inertial pos="0.1165 0.0014 0" quat="-0.0135706 0.706977 0.0135706 0.706977" mass="2.3311" diaginertia="0.0047 0.00450384 0.00189616"/>
+            <joint name="upperarm_roll_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-76.94 76.94" damping="5"/>
+            <geom type="mesh" rgba="1 1 1 1" mesh="upperarm_roll_link_collision"/>
+            <body name="elbow_flex_link" pos="0.133 0 0">
+              <inertial pos="0.1279 0.0073 0" quat="0.43318 0.43318 0.558888 0.558888" mass="2.1299" diaginertia="0.0086121 0.0084 0.0019879"/>
+              <joint name="elbow_flex_joint" pos="0 0 0" axis="0 1 0" range="-2.251 2.251" actuatorfrcrange="-66.18 66.18" damping="1"/>
+              <geom type="mesh" rgba="0.086 0.506 0.767 1" mesh="elbow_flex_link_collision"/>
+              <body name="forearm_roll_link" pos="0.197 0 0">
+                <inertial pos="0.1097 -0.0266 0" quat="-0.0714533 0.703487 0.0714533 0.703487" mass="1.6563" diaginertia="0.0035 0.00306158 0.00153842"/>
+                <joint name="forearm_roll_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-29.35 29.35" damping="5"/>
+                <geom type="mesh" rgba="1 1 1 1" mesh="forearm_roll_link_collision"/>
+                <body name="wrist_flex_link" pos="0.1245 0 0">
+                  <inertial pos="0.0882 0.0009 -0.0001" quat="0.4895 0.4895 0.510284 0.510284" mass="1.725" diaginertia="0.00420416 0.0042 0.00179584"/>
+                  <joint name="wrist_flex_joint" pos="0 0 0" axis="0 1 0" range="-2.16 2.16" actuatorfrcrange="-25.7 25.7" damping="1"/>
+                  <geom type="mesh" rgba="0.086 0.506 0.767 1" mesh="wrist_flex_link_collision"/>
+                  <body name="wrist_roll_link" pos="0.1385 0 0">
+                    <inertial pos="-0.0818493 -5.90417e-05 0.151238" quat="0.670593 -0.227362 -0.230421 0.667472" mass="1.6529" diaginertia="0.00661297 0.00636337 0.00214959"/>
+                    <joint name="wrist_roll_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-7.36 7.36" damping="5"/>
+                    <geom type="mesh" rgba="1 1 1 1" mesh="wrist_roll_link_collision"/>
+                    <geom pos="0.16645 0 0" quat="1 0 0 0" type="mesh" mesh="gripper_link"/>
+                    <body name="r_gripper_finger_link" pos="0.16645 0.015425 0">
+                      <inertial pos="-0.01 0 0" mass="0.0798" diaginertia="0.002 0.002 0.002"/>
+                      <joint name="r_gripper_finger_joint" pos="0 0 0" axis="0 1 0" type="slide" range="0 0.05" actuatorfrcrange="-60 60" damping="100"/>
+                      <geom pos="0 0.101425 0" quat="1 0 0 0" type="mesh" rgba="0.356 0.361 0.376 1" mesh="r_gripper_finger_link"/>
+                    </body>
+                    <body name="l_gripper_finger_link" pos="0.16645 -0.015425 0">
+                      <inertial pos="-0.01 0 0" mass="0.0798" diaginertia="0.002 0.002 0.002"/>
+                      <joint name="l_gripper_finger_joint" pos="0 0 0" axis="0 -1 0" type="slide" range="0 0.05" actuatorfrcrange="-60 60" damping="100"/>
+                      <geom pos="0 -0.101425 0" quat="1 0 0 0" type="mesh" rgba="0.356 0.361 0.376 1" mesh="l_gripper_finger_link"/>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="bellows_link">
+        <inertial pos="0.019132 0 -0.134862" quat="1 0 1.66507e-05 0" mass="0.169374" diaginertia="0.00331159 0.00174447 0.00169418"/>
+        <joint name="bellows_joint" pos="0 0 0" axis="0 0 -1" type="slide" range="0 0.4" actuatorfrcrange="-5 5"/>
+        <geom type="mesh" rgba="0 0 0 1" mesh="bellows_link_collision"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

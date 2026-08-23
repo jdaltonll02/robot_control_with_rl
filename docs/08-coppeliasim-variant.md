@@ -1,4 +1,4 @@
-# CoppeliaSim Variant (experimental, unverified)
+# CoppeliaSim Variant (attempted, not completed — see notes below)
 
 A second, independent backend for the same goal-conditioned FetchPush task, running on
 CoppeliaSim (EDU) instead of MuJoCo, using the real Fetch robot's URDF. Nothing in the
@@ -6,13 +6,16 @@ original MuJoCo pipeline (`scripts/fetch_push_env.py`, `her_replay_buffer.py`,
 `sac_fetchpush.py`, `ddpg_fetchpush.py`, `evaluate_policy.py`, `verify_custom_env.py`) is
 modified — every file listed below is new.
 
-**Status: none of this has been run against a live CoppeliaSim instance.** The scene itself
-(URDF import, IK group, cube/goal objects) has to be built by hand in the CoppeliaSim GUI —
-that's not something achievable through file edits — so the Python side below is written
-against the *expected* scene layout, not verified against an actual one. Treat this as a
-first implementation to smoke-test and adjust, not a finished, working integration. Places
-where the exact API depends on your installed CoppeliaSim version/physics engine and
-couldn't be confirmed without a running instance are marked `# VERIFY:` in the code.
+**Status: attempted through a full scene build, did not reach a working state.** The scene
+(URDF import, table/object/goal, IK group) was built by hand following the steps below, and
+the Python module was written against it — but the resulting scene has a real physics
+instability (non-convex dynamic collision shapes → severe slowdown, and a failed convex-hull
+fix that caused a physics explosion instead of resolving it). **See
+[09-alternative-simulators.md](09-alternative-simulators.md) for the full account of what was
+tried, what broke, and why** — this project ultimately settled on the working MuJoCo pipeline
+as the sole delivered environment. The setup steps below are left intact as accurate
+instructions for the parts that did work (URDF import, object/dummy creation, IK wizard
+usage); only the final collision-shape step is the known broken point.
 
 ## Why a second backend
 

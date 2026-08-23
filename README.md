@@ -232,15 +232,17 @@ python scripts/evaluate_policy.py \
 This produces a JSON with success rate, mean return, episode length, and mean action energy —
 see [`docs/06-evaluation.md`](docs/06-evaluation.md) for the full schema and metric definitions.
 
-## Experimental: CoppeliaSim backend
+## Alternative simulators (explored, not completed)
 
-A second, independent backend for the same task runs on CoppeliaSim instead of MuJoCo, using
-the real Fetch robot's URDF, without modifying any file listed above — every relevant script
-has a `_coppeliasim.py` counterpart that reuses the HER buffer and reward math unmodified and
-reimplements only what's genuinely simulator-specific (observation construction, IK-based
-action application, domain randomization). It's still being brought up and isn't part of the
-Results section above. See [`docs/08-coppeliasim-variant.md`](docs/08-coppeliasim-variant.md)
-for setup and known gaps.
+Three attempts were made at running this task on the real Fetch robot's URDF instead of
+Gymnasium-Robotics' built-in model, or on a different physics engine entirely — CoppeliaSim,
+MuJoCo loaded directly from the raw URDF, and PyBullet. **None reached a working, trainable
+state**; none of them touched any file in the pipeline above. The common thread: driving a
+real, uncalibrated URDF via Cartesian/IK control turned out to be a genuine control-engineering
+problem in every engine tried, not a quick integration task — PyBullet got furthest (the only
+one that never diverged or exploded) but still didn't achieve precise tracking. Full honest
+account, including exactly what broke and why, in
+[`docs/09-alternative-simulators.md`](docs/09-alternative-simulators.md).
 
 ## Background reading
 
