@@ -61,6 +61,25 @@ Full experiment matrix, all trained for 250K timesteps (500K for the domain-rand
 run) on this repo's exact scripts/hyperparameters, evaluated over 100 episodes (50 for the
 robustness grid) via `scripts/evaluate_policy.py`. Raw JSON for every row is in `results/`.
 
+### All runs at a glance
+
+Every trained checkpoint, evaluated and recorded — 10 sample episodes per run in the linked
+video folder.
+
+| Run | Algorithm | Reward type | HER | Success rate | Videos |
+|---|---|---|---|---|---|
+| `sac-baseline-no-her` | SAC | sparse | No | 6% | [`videos_baseline/`](videos_baseline/) |
+| `sac-her-sparse` | SAC | sparse | Yes | **95–99%** | [`videos_sac_her/`](videos_sac_her/) |
+| `ddpg-her-sparse` | DDPG | sparse | Yes | 6% | [`videos_ddpg_her/`](videos_ddpg_her/) |
+| `sac-her-dense-basic` | SAC | dense_basic | Yes | 6% | [`videos_dense_basic/`](videos_dense_basic/) |
+| `sac-her-progress-bonus` | SAC | progress_bonus | Yes | 67–77% | [`videos_progress_bonus/`](videos_progress_bonus/) |
+| `sac-her-energy-efficient` | SAC | energy_efficient | Yes | 6% | [`videos_energy_efficient/`](videos_energy_efficient/) |
+| `sac-her-dr` | SAC | sparse (+ domain randomization) | Yes | ~93–94% under randomization; 100% at nominal eval | [`videos_dr/`](videos_dr/) |
+
+Runs marked 6% never learned at all (training curve flat from step 0) — watching their
+videos looks the same as the random baseline, since that's effectively what they are. The
+sections below explain each comparison and why.
+
 ### Algorithm × HER
 
 | Configuration | Success rate | Mean return |
@@ -151,7 +170,9 @@ noise, not necessarily a real effect. See [docs/05-domain-randomization.md](docs
 │   └── coppeliasim/                      # scene assets + setup helpers for the above
 ├── results/                     # evaluation results (JSON, one per experiment) — see README Results
 ├── figures/                     # plots (training curves, comparisons)
-├── videos/                      # recorded rollouts
+├── videos_baseline/, videos_sac_her/, videos_ddpg_her/,
+│   videos_dense_basic/, videos_progress_bonus/,
+│   videos_energy_efficient/, videos_dr/  # 10 sample episodes per run, one folder each — see README Results
 ├── assets/                      # README gifs
 ├── verify_custom_env.py         # quick sanity check for the custom env
 └── verify_custom_env_coppeliasim.py  # sanity check + throughput probe for the CoppeliaSim variant
