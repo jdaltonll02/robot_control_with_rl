@@ -66,19 +66,21 @@ robustness grid) via `scripts/evaluate_policy.py`. Raw JSON for every row is in 
 Every trained checkpoint, evaluated and recorded — 10 sample episodes per run in the linked
 video folder.
 
-| Run | Algorithm | Reward type | HER | Success rate | Videos |
+| Run | Algorithm | Reward type | HER | Success rate | Video (10 episodes, 20s) |
 |---|---|---|---|---|---|
-| `sac-baseline-no-her` | SAC | sparse | No | 6% | [`videos_baseline/`](videos_baseline/) |
-| `sac-her-sparse` | SAC | sparse | Yes | **95–99%** | [`videos_sac_her/`](videos_sac_her/) |
-| `ddpg-her-sparse` | DDPG | sparse | Yes | 6% | [`videos_ddpg_her/`](videos_ddpg_her/) |
-| `sac-her-dense-basic` | SAC | dense_basic | Yes | 6% | [`videos_dense_basic/`](videos_dense_basic/) |
-| `sac-her-progress-bonus` | SAC | progress_bonus | Yes | 67–77% | [`videos_progress_bonus/`](videos_progress_bonus/) |
-| `sac-her-energy-efficient` | SAC | energy_efficient | Yes | 6% | [`videos_energy_efficient/`](videos_energy_efficient/) |
-| `sac-her-dr` | SAC | sparse (+ domain randomization) | Yes | ~93–94% under randomization; 100% at nominal eval | [`videos_dr/`](videos_dr/) |
+| `sac-baseline-no-her` | SAC | sparse | No | 6% | [`videos_baseline/sac_baseline_no_her.mp4`](videos_baseline/sac_baseline_no_her.mp4) |
+| `sac-her-sparse` | SAC | sparse | Yes | **95–99%** | [`videos_sac_her/sac_her_sparse.mp4`](videos_sac_her/sac_her_sparse.mp4) |
+| `ddpg-her-sparse` | DDPG | sparse | Yes | 6% | [`videos_ddpg_her/ddpg_her_sparse.mp4`](videos_ddpg_her/ddpg_her_sparse.mp4) |
+| `sac-her-dense-basic` | SAC | dense_basic | Yes | 6% | [`videos_dense_basic/sac_her_dense_basic.mp4`](videos_dense_basic/sac_her_dense_basic.mp4) |
+| `sac-her-progress-bonus` | SAC | progress_bonus | Yes | 67–77% | [`videos_progress_bonus/sac_her_progress_bonus.mp4`](videos_progress_bonus/sac_her_progress_bonus.mp4) |
+| `sac-her-energy-efficient` | SAC | energy_efficient | Yes | 6% | [`videos_energy_efficient/sac_her_energy_efficient.mp4`](videos_energy_efficient/sac_her_energy_efficient.mp4) |
+| `sac-her-dr` | SAC | sparse (+ domain randomization) | Yes | ~93–94% under randomization; 100% at nominal eval | [`videos_dr/sac_her_dr.mp4`](videos_dr/sac_her_dr.mp4) |
 
-Runs marked 6% never learned at all (training curve flat from step 0) — watching their
-videos looks the same as the random baseline, since that's effectively what they are. The
-sections below explain each comparison and why.
+Each linked file concatenates that run's 10 sample episodes into one clip; the individual
+per-episode files are still in each folder alongside it. Runs marked 6% never learned at all
+(training curve flat from step 0) — watching their videos looks the same as the random
+baseline, since that's effectively what they are. The sections below explain each comparison
+and why.
 
 ### Algorithm × HER
 
