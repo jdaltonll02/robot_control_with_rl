@@ -88,7 +88,12 @@ class Args:
     total_timesteps: int = 250000
     """total timesteps of the experiments"""
     learning_rate: float = 1e-3
-    """the learning rate of the optimizer"""
+    """the learning rate of the critic (Q-network) optimizer"""
+    policy_lr: float = 1e-4
+    """the learning rate of the actor (policy) optimizer. Deliberately lower than the
+    critic's learning_rate (standard DDPG practice, matching sac_fetchpush.py's
+    policy_lr < q_lr) — a too-high actor LR drives tanh output saturation early in
+    training, after which tanh's vanishing gradient permanently locks the actor in place."""
     buffer_size: int = int(1e6)
     """the replay memory buffer size"""
     gamma: float = 0.95
@@ -216,7 +221,7 @@ if __name__ == "__main__":
     target_actor.load_state_dict(actor.state_dict())
     qf1_target.load_state_dict(qf1.state_dict())
     q_optimizer = optim.Adam(list(qf1.parameters()), lr=args.learning_rate)
-    actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
+    actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
     envs.single_observation_space.dtype = np.float32
 
